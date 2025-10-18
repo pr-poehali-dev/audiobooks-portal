@@ -1,0 +1,30 @@
+{
+  "tests": [
+    {
+      "name": "Get all audiobooks",
+      "method": "GET",
+      "path": "/",
+      "expectedStatus": 200,
+      "expectedBody": [],
+      "bodyMatcher": "type"
+    },
+    {
+      "name": "Create audiobook",
+      "method": "POST",
+      "path": "/",
+      "body": {
+        "title": "Test Book",
+        "author": "Test Author",
+        "description": "Test description",
+        "audioUrl": "https://example.com/audio.mp3",
+        "durationSeconds": 3600
+      },
+      "expectedStatus": 201,
+      "expectedBody": {
+        "title": "Test Book",
+        "author": "Test Author"
+      },
+      "bodyMatcher": "partial"
+    }
+  ]
+}

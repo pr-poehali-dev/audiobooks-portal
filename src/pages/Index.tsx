@@ -3,57 +3,26 @@ import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Slider } from '@/components/ui/slider';
+import { Textarea } from '@/components/ui/textarea';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
+import { Label } from '@/components/ui/label';
 import Icon from '@/components/ui/icon';
+import { useToast } from '@/hooks/use-toast';
+
+const API_URL = 'https://functions.poehali.dev/3593bd16-2f0f-4be5-a87e-9e9602ed18fd';
 
 interface AudioBook {
   id: number;
   title: string;
   author: string;
-  duration: string;
-  cover: string;
-  audioUrl: string;
-  inProgress?: boolean;
-  progress?: number;
+  description?: string;
+  duration_seconds?: number;
+  cover_url?: string;
+  audio_url?: string;
+  in_progress?: boolean;
+  progress_percent?: number;
+  file_size_mb?: number;
 }
-
-const sampleBooks: AudioBook[] = [
-  {
-    id: 1,
-    title: "Мастер и Маргарита",
-    author: "Михаил Булгаков",
-    duration: "15:42:00",
-    cover: "https://cdn.poehali.dev/files/81bab472-98a5-4765-a63f-1c1fc80d5260.jpeg",
-    audioUrl: "",
-    inProgress: true,
-    progress: 35
-  },
-  {
-    id: 2,
-    title: "Анна Каренина",
-    author: "Лев Толстой",
-    duration: "32:15:00",
-    cover: "https://cdn.poehali.dev/files/81bab472-98a5-4765-a63f-1c1fc80d5260.jpeg",
-    audioUrl: ""
-  },
-  {
-    id: 3,
-    title: "Преступление и наказание",
-    author: "Федор Достоевский",
-    duration: "21:30:00",
-    cover: "https://cdn.poehali.dev/files/81bab472-98a5-4765-a63f-1c1fc80d5260.jpeg",
-    audioUrl: ""
-  },
-  {
-    id: 4,
-    title: "Война и мир",
-    author: "Лев Толстой",
-    duration: "61:08:00",
-    cover: "https://cdn.poehali.dev/files/81bab472-98a5-4765-a63f-1c1fc80d5260.jpeg",
-    audioUrl: "",
-    inProgress: true,
-    progress: 12
-  }
-];
 
 export default function Index() {
   const [activeSection, setActiveSection] = useState('home');
@@ -62,14 +31,119 @@ export default function Index() {
   const [currentBook, setCurrentBook] = useState<AudioBook | null>(null);
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
+  const [books, setBooks] = useState<AudioBook[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [uploadDialogOpen, setUploadDialogOpen] = useState(false);
   const audioRef = useRef<HTMLAudioElement>(null);
+  const { toast } = useToast();
 
-  const filteredBooks = sampleBooks.filter(book => 
+  const [newBook, setNewBook] = useState({
+    title: '',
+    author: '',
+    description: '',
+    audioFile: null as File | null,
+    coverFile: null as File | null
+  });
+
+  useEffect(() => {
+    fetchBooks();
+  }, []);
+
+  const fetchBooks = async () => {
+    try {
+      setIsLoading(true);
+      const response = await fetch(API_URL);
+      const data = await response.json();
+      setBooks(data);
+    } catch (error) {
+      toast({
+        title: "Ошибка загрузки",
+        description: "Не удалось загрузить список книг",
+        variant: "destructive"
+      });
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleFileToBase64 = (file: File): Promise<string> => {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.readAsDataURL(file);
+      reader.onload = () => resolve(reader.result as string);
+      reader.onerror = error => reject(error);
+    });
+  };
+
+  const handleUploadBook = async () => {
+    if (!newBook.title || !newBook.author) {
+      toast({
+        title: "Ошибка",
+        description: "Заполните название и автора",
+        variant: "destructive"
+      });
+      return;
+    }
+
+    try {
+      let audioUrl = '';
+      let coverUrl = 'https://cdn.poehali.dev/files/81bab472-98a5-4765-a63f-1c1fc80d5260.jpeg';
+
+      if (newBook.audioFile) {
+        const audioBlob = new Blob([newBook.audioFile], { type: newBook.audioFile.type });
+        audioUrl = URL.createObjectURL(audioBlob);
+      }
+
+      if (newBook.coverFile) {
+        const coverBlob = new Blob([newBook.coverFile], { type: newBook.coverFile.type });
+        coverUrl = URL.createObjectURL(coverBlob);
+      }
+
+      const response = await fetch(API_URL, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          title: newBook.title,
+          author: newBook.author,
+          description: newBook.description,
+          audioUrl: audioUrl,
+          coverUrl: coverUrl,
+          durationSeconds: 0
+        })
+      });
+
+      if (response.ok) {
+        toast({
+          title: "Успешно!",
+          description: "Аудиокнига добавлена"
+        });
+        setUploadDialogOpen(false);
+        setNewBook({
+          title: '',
+          author: '',
+          description: '',
+          audioFile: null,
+          coverFile: null
+        });
+        fetchBooks();
+      }
+    } catch (error) {
+      toast({
+        title: "Ошибка",
+        description: "Не удалось добавить книгу",
+        variant: "destructive"
+      });
+    }
+  };
+
+  const filteredBooks = books.filter(book => 
     book.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
     book.author.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
-  const booksInProgress = sampleBooks.filter(book => book.inProgress);
+  const booksInProgress = books.filter(book => book.in_progress);
 
   const handlePlayPause = () => {
     if (audioRef.current) {
@@ -84,18 +158,18 @@ export default function Index() {
 
   const handleNext = () => {
     if (currentBook) {
-      const currentIndex = sampleBooks.findIndex(b => b.id === currentBook.id);
-      const nextIndex = (currentIndex + 1) % sampleBooks.length;
-      setCurrentBook(sampleBooks[nextIndex]);
+      const currentIndex = books.findIndex(b => b.id === currentBook.id);
+      const nextIndex = (currentIndex + 1) % books.length;
+      setCurrentBook(books[nextIndex]);
       setIsPlaying(true);
     }
   };
 
   const handlePrevious = () => {
     if (currentBook) {
-      const currentIndex = sampleBooks.findIndex(b => b.id === currentBook.id);
-      const prevIndex = currentIndex === 0 ? sampleBooks.length - 1 : currentIndex - 1;
-      setCurrentBook(sampleBooks[prevIndex]);
+      const currentIndex = books.findIndex(b => b.id === currentBook.id);
+      const prevIndex = currentIndex === 0 ? books.length - 1 : currentIndex - 1;
+      setCurrentBook(books[prevIndex]);
       setIsPlaying(true);
     }
   };
@@ -127,43 +201,115 @@ export default function Index() {
         <p className="text-xl text-muted-foreground max-w-2xl mx-auto">
           Погрузитесь в мир литературы через звук
         </p>
+        
+        <Dialog open={uploadDialogOpen} onOpenChange={setUploadDialogOpen}>
+          <DialogTrigger asChild>
+            <Button size="lg" className="mt-4">
+              <Icon name="Plus" size={20} className="mr-2" />
+              Добавить аудиокнигу
+            </Button>
+          </DialogTrigger>
+          <DialogContent className="sm:max-w-[500px]">
+            <DialogHeader>
+              <DialogTitle>Добавить новую аудиокнигу</DialogTitle>
+            </DialogHeader>
+            <div className="space-y-4 py-4">
+              <div className="space-y-2">
+                <Label htmlFor="title">Название *</Label>
+                <Input
+                  id="title"
+                  value={newBook.title}
+                  onChange={(e) => setNewBook({...newBook, title: e.target.value})}
+                  placeholder="Введите название книги"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="author">Автор *</Label>
+                <Input
+                  id="author"
+                  value={newBook.author}
+                  onChange={(e) => setNewBook({...newBook, author: e.target.value})}
+                  placeholder="Введите имя автора"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="description">Описание</Label>
+                <Textarea
+                  id="description"
+                  value={newBook.description}
+                  onChange={(e) => setNewBook({...newBook, description: e.target.value})}
+                  placeholder="Краткое описание книги"
+                  rows={3}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="audio">Аудиофайл MP3</Label>
+                <Input
+                  id="audio"
+                  type="file"
+                  accept="audio/mpeg,audio/mp3"
+                  onChange={(e) => setNewBook({...newBook, audioFile: e.target.files?.[0] || null})}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="cover">Обложка (изображение)</Label>
+                <Input
+                  id="cover"
+                  type="file"
+                  accept="image/*"
+                  onChange={(e) => setNewBook({...newBook, coverFile: e.target.files?.[0] || null})}
+                />
+              </div>
+              <Button onClick={handleUploadBook} className="w-full">
+                <Icon name="Upload" size={18} className="mr-2" />
+                Загрузить книгу
+              </Button>
+            </div>
+          </DialogContent>
+        </Dialog>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-        {filteredBooks.map((book, index) => (
-          <Card 
-            key={book.id} 
-            className="overflow-hidden hover-scale cursor-pointer group transition-all duration-300"
-            style={{ animationDelay: `${index * 100}ms` }}
-            onClick={() => {
-              setCurrentBook(book);
-              setIsPlaying(true);
-              setActiveSection('player');
-            }}
-          >
-            <div className="aspect-square overflow-hidden">
-              <img 
-                src={book.cover} 
-                alt={book.title}
-                className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500"
-              />
-            </div>
-            <div className="p-4 space-y-2">
-              <h3 className="font-semibold text-lg line-clamp-2">{book.title}</h3>
-              <p className="text-sm text-muted-foreground">{book.author}</p>
-              <div className="flex items-center justify-between text-xs text-muted-foreground">
-                <span className="flex items-center gap-1">
-                  <Icon name="Clock" size={14} />
-                  {book.duration}
-                </span>
-                {book.inProgress && (
-                  <span className="text-primary font-medium">{book.progress}%</span>
-                )}
+      {isLoading ? (
+        <div className="text-center py-12">
+          <p className="text-muted-foreground">Загрузка...</p>
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+          {filteredBooks.map((book, index) => (
+            <Card 
+              key={book.id} 
+              className="overflow-hidden hover-scale cursor-pointer group transition-all duration-300"
+              style={{ animationDelay: `${index * 100}ms` }}
+              onClick={() => {
+                setCurrentBook(book);
+                setIsPlaying(true);
+                setActiveSection('player');
+              }}
+            >
+              <div className="aspect-square overflow-hidden">
+                <img 
+                  src={book.cover_url || "https://cdn.poehali.dev/files/81bab472-98a5-4765-a63f-1c1fc80d5260.jpeg"} 
+                  alt={book.title}
+                  className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500"
+                />
               </div>
-            </div>
-          </Card>
-        ))}
-      </div>
+              <div className="p-4 space-y-2">
+                <h3 className="font-semibold text-lg line-clamp-2">{book.title}</h3>
+                <p className="text-sm text-muted-foreground">{book.author}</p>
+                <div className="flex items-center justify-between text-xs text-muted-foreground">
+                  <span className="flex items-center gap-1">
+                    <Icon name="Clock" size={14} />
+                    {book.duration_seconds ? formatTime(book.duration_seconds) : 'N/A'}
+                  </span>
+                  {book.in_progress && (
+                    <span className="text-primary font-medium">{book.progress_percent}%</span>
+                  )}
+                </div>
+              </div>
+            </Card>
+          ))}
+        </div>
+      )}
     </div>
   );
 
@@ -183,7 +329,7 @@ export default function Index() {
           >
             <div className="aspect-video overflow-hidden">
               <img 
-                src={book.cover} 
+                src={book.cover_url || "https://cdn.poehali.dev/files/81bab472-98a5-4765-a63f-1c1fc80d5260.jpeg"} 
                 alt={book.title}
                 className="w-full h-full object-cover"
               />
@@ -195,10 +341,10 @@ export default function Index() {
                 <div className="w-full bg-secondary rounded-full h-2">
                   <div 
                     className="bg-primary h-2 rounded-full transition-all duration-500"
-                    style={{ width: `${book.progress}%` }}
+                    style={{ width: `${book.progress_percent || 0}%` }}
                   />
                 </div>
-                <p className="text-xs text-muted-foreground text-right">{book.progress}% прослушано</p>
+                <p className="text-xs text-muted-foreground text-right">{book.progress_percent || 0}% прослушано</p>
               </div>
             </div>
           </Card>
@@ -211,7 +357,7 @@ export default function Index() {
     <div className="max-w-2xl mx-auto space-y-8 animate-fade-in">
       <div className="aspect-square rounded-2xl overflow-hidden shadow-2xl">
         <img 
-          src={currentBook?.cover || "https://cdn.poehali.dev/files/81bab472-98a5-4765-a63f-1c1fc80d5260.jpeg"} 
+          src={currentBook?.cover_url || "https://cdn.poehali.dev/files/81bab472-98a5-4765-a63f-1c1fc80d5260.jpeg"} 
           alt={currentBook?.title}
           className="w-full h-full object-cover"
         />
@@ -220,6 +366,9 @@ export default function Index() {
       <div className="text-center space-y-2">
         <h2 className="text-3xl font-bold">{currentBook?.title || "Выберите аудиокнигу"}</h2>
         <p className="text-lg text-muted-foreground">{currentBook?.author}</p>
+        {currentBook?.description && (
+          <p className="text-sm text-muted-foreground mt-4">{currentBook.description}</p>
+        )}
       </div>
 
       <div className="space-y-4">
@@ -268,12 +417,15 @@ export default function Index() {
         </Button>
       </div>
 
-      <audio 
-        ref={audioRef}
-        onTimeUpdate={(e) => setCurrentTime(e.currentTarget.currentTime)}
-        onLoadedMetadata={(e) => setDuration(e.currentTarget.duration)}
-        onEnded={() => setIsPlaying(false)}
-      />
+      {currentBook?.audio_url && (
+        <audio 
+          ref={audioRef}
+          src={currentBook.audio_url}
+          onTimeUpdate={(e) => setCurrentTime(e.currentTarget.currentTime)}
+          onLoadedMetadata={(e) => setDuration(e.currentTarget.duration)}
+          onEnded={() => setIsPlaying(false)}
+        />
+      )}
     </div>
   );
 
@@ -304,7 +456,7 @@ export default function Index() {
           >
             <div className="aspect-square overflow-hidden">
               <img 
-                src={book.cover} 
+                src={book.cover_url || "https://cdn.poehali.dev/files/81bab472-98a5-4765-a63f-1c1fc80d5260.jpeg"} 
                 alt={book.title}
                 className="w-full h-full object-cover"
               />

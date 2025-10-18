@@ -1,0 +1,20 @@
+{
+  "tests": [
+    {
+      "name": "Upload file simulation",
+      "method": "POST",
+      "path": "/",
+      "body": {
+        "file": "base64encodeddata",
+        "fileName": "test.mp3",
+        "fileType": "audio/mpeg"
+      },
+      "expectedStatus": 200,
+      "expectedBody": {
+        "url": "string",
+        "fileName": "string"
+      },
+      "bodyMatcher": "partial"
+    }
+  ]
+}
